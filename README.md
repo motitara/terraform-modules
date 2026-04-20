@@ -135,6 +135,34 @@ The Azure federated identity should be able to:
 - Manage the target subscription or resource group.
 - Read and write the Azure Storage container used for Terraform state.
 
+Create one federated identity credential on the Azure app registration for each GitHub environment used by the workflow. For example, when `target_environment` is `dev`, GitHub sends this OIDC subject:
+
+```text
+repo:motitara/terraform-modules:environment:dev
+```
+
+Azure CLI example:
+
+```powershell
+$appId = "<AZURE_CLIENT_ID>"
+
+$credentialPath = "$env:TEMP\github-dev-federated-credential.json"
+
+@{
+  name        = "github-dev"
+  issuer      = "https://token.actions.githubusercontent.com"
+  subject     = "repo:motitara/terraform-modules:environment:dev"
+  audiences   = @("api://AzureADTokenExchange")
+  description = "GitHub Actions OIDC for terraform-modules dev environment"
+} | ConvertTo-Json -Depth 10 | Set-Content -Path $credentialPath -Encoding utf8
+
+az ad app federated-credential create `
+  --id $appId `
+  --parameters "@$credentialPath"
+```
+
+For another GitHub environment, create another credential with the matching subject, such as `repo:motitara/terraform-modules:environment:prod`.
+
 The GCP service account should be able to:
 
 - Manage Compute, GKE, Service Networking, and Cloud SQL resources in the target project.

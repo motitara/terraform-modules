@@ -74,7 +74,7 @@ variable "node_count" {
 variable "node_vm_size" {
   description = "Azure VM size for AKS nodes."
   type        = string
-  default     = "Standard_B2s"
+  default     = "Standard_DC2ads_v5"
 }
 
 variable "enable_auto_scaling" {
