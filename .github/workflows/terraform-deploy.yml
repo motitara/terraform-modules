@@ -1,0 +1,175 @@
+name: Terraform Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: Cloud provider to deploy
+        required: true
+        type: choice
+        options:
+          - azure
+          - gcp
+      terraform_action:
+        description: Terraform action to run
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+      target_environment:
+        description: GitHub environment for approvals and scoped secrets
+        required: true
+        type: environment
+      name_prefix:
+        description: Resource name prefix, for example idea-board-dev
+        required: true
+        type: string
+      azure_location:
+        description: Azure region used when cloud=azure
+        required: false
+        default: eastus
+        type: string
+      gcp_region:
+        description: GCP region used when cloud=gcp
+        required: false
+        default: us-central1
+        type: string
+      gcp_project_id:
+        description: GCP project ID used when cloud=gcp
+        required: false
+        type: string
+      confirm_destroy:
+        description: Type destroy to allow terraform destroy
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-${{ inputs.cloud }}-${{ inputs.target_environment }}-${{ inputs.name_prefix }}
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    name: Terraform ${{ inputs.terraform_action }} (${{ inputs.cloud }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target_environment }}
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TF_WORKING_DIR: clouds/${{ inputs.cloud }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate destroy confirmation
+        if: inputs.terraform_action == 'destroy' && inputs.confirm_destroy != 'destroy'
+        shell: bash
+        run: |
+          echo "Destroy was requested, but confirm_destroy was not set to 'destroy'."
+          exit 1
+
+      - name: Validate GCP project input
+        if: inputs.cloud == 'gcp' && inputs.gcp_project_id == ''
+        shell: bash
+        run: |
+          echo "gcp_project_id is required when cloud=gcp."
+          exit 1
+
+      - name: Azure login
+        if: inputs.cloud == 'azure'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: GCP auth
+        if: inputs.cloud == 'gcp'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+
+      - name: Terraform fmt
+        working-directory: .
+        shell: bash
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init - Azure backend
+        if: inputs.cloud == 'azure'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.AZURE_TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.AZURE_TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.AZURE_TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ inputs.target_environment }}/${{ inputs.name_prefix }}.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+            -backend-config="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Terraform init - GCP backend
+        if: inputs.cloud == 'gcp'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ vars.GCP_TF_STATE_BUCKET }}" \
+            -backend-config="prefix=${{ inputs.target_environment }}/${{ inputs.name_prefix }}"
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: terraform validate
+
+      - name: Terraform plan
+        if: inputs.terraform_action != 'destroy'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_name_prefix: ${{ inputs.name_prefix }}
+          TF_VAR_location: ${{ inputs.azure_location }}
+          TF_VAR_postgres_admin_password: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          TF_VAR_project_id: ${{ inputs.gcp_project_id }}
+          TF_VAR_region: ${{ inputs.gcp_region }}
+          TF_VAR_database_password: ${{ secrets.GCP_DATABASE_PASSWORD }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform destroy plan
+        if: inputs.terraform_action == 'destroy'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_name_prefix: ${{ inputs.name_prefix }}
+          TF_VAR_location: ${{ inputs.azure_location }}
+          TF_VAR_postgres_admin_password: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
+          TF_VAR_project_id: ${{ inputs.gcp_project_id }}
+          TF_VAR_region: ${{ inputs.gcp_region }}
+          TF_VAR_database_password: ${{ secrets.GCP_DATABASE_PASSWORD }}
+        run: terraform plan -destroy -out=tfplan
+
+      - name: Terraform apply
+        if: inputs.terraform_action == 'apply' || inputs.terraform_action == 'destroy'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: terraform apply -auto-approve tfplan
