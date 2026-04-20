@@ -1,0 +1,10 @@
+project_id        = "my-gcp-project"
+name_prefix       = "idea-board-dev"
+region            = "us-central1"
+database_password = "replace-with-a-strong-password"
+
+labels = {
+  environment = "dev"
+  application = "idea-board"
+  managed-by  = "terraform"
+}

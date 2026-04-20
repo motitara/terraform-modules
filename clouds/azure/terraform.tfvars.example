@@ -1,0 +1,9 @@
+name_prefix             = "idea-board-dev"
+location                = "eastus"
+postgres_admin_password = "replace-with-a-strong-password"
+
+tags = {
+  environment = "dev"
+  application = "idea-board"
+  managed-by  = "terraform"
+}
