@@ -95,6 +95,8 @@ Open **Actions > Terraform Deploy > Run workflow**, then choose:
 
 The workflow uses OIDC federation for cloud authentication and remote Terraform state. Create the remote state storage before the first run.
 
+For Azure on GitHub-hosted runners, keep the workflow login set to `auth-type: SERVICE_PRINCIPAL`. `auth-type: IDENTITY` is only for managed identity login from Azure-hosted self-hosted runners.
+
 ### GitHub Secrets
 
 Set these as repository secrets or environment-scoped secrets.
