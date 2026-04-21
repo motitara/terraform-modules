@@ -122,7 +122,7 @@ variable "postgres_database_name" {
 variable "postgres_sku_name" {
   description = "Azure PostgreSQL Flexible Server SKU name."
   type        = string
-  default     = "B_Standard_B1ms"
+  default     = "B_Standard_B2s"
 }
 
 variable "postgres_storage_mb" {
