@@ -1,5 +1,5 @@
 name_prefix             = "idea-board-dev"
-location                = "eastus"
+location                = "centralindia"
 postgres_admin_password = "replace-with-a-strong-password"
 
 tags = {

@@ -52,7 +52,7 @@ For a quick local module syntax check without remote state, run `terraform init 
 ```hcl
 subscription_id         = "00000000-0000-0000-0000-000000000000"
 name_prefix             = "idea-board-dev"
-location                = "eastus"
+location                = "centralindia"
 postgres_admin_password = "replace-with-a-strong-password"
 ```
 

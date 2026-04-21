@@ -29,7 +29,7 @@ on:
       azure_location:
         description: Azure region used when cloud=azure
         required: false
-        default: eastus
+        default: centralindia
         type: string
       gcp_region:
         description: GCP region used when cloud=gcp
